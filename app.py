@@ -9,8 +9,19 @@ from datetime import datetime
 from functools import wraps
 from sqlalchemy import text
 from flask import send_from_directory
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
+
+csrf = CSRFProtect(app)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
 # Serve Service Worker from the root
 @app.route('/sw.js')
@@ -141,6 +152,7 @@ def index():
     return render_template('index.html', services=services)
 
 @app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def register():
     if request.method == 'POST':
         name = request.form['name']
@@ -168,15 +180,20 @@ def register():
             user_type=user_type
         )
         
-        db.session.add(new_user)
-        db.session.commit()
-        
-        flash('Registration successful! Please login.', 'success')
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+            flash('Registration successful! Please login.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred during registration. Please try again.', 'danger')
+            return redirect(url_for('register'))
         return redirect(url_for('login'))
     
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def login():
     if request.method == 'POST':
         email = request.form['email']
@@ -811,6 +828,8 @@ def init_db():
         # Migrations are now handled on app import (lines 115-139)
         print("[SUCCESS] Database initialized successfully!")
         print("[SUCCESS] All tables created and migrations applied")
+
+application = app
 
 if __name__ == '__main__':
     init_db()

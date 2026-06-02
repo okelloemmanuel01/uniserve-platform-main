@@ -14,6 +14,10 @@ services:
           property: connectionString
       - key: RENDER
         value: "true"
+    disk:
+      name: uploads
+      mountPath: /opt/render/project/src/static/uploads
+      sizeGB: 1
 
 databases:
   - name: uniserve-db
